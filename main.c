@@ -3,81 +3,114 @@
 #include <stdlib.h>
 #include "common_defs.h"
 
-/* #define RUN_EXAMPLE */
+#define MAX_COEFF    10
+#define MAX_N        (1<<20)
 
-/*
-** NOTE: Can check results in octave, e.g. abs(ifft(fft([4 3 2 1], 8).*fft([4 3 2 1], 8), 8))
-*/
 int main(int argc, char* argv[])
 {
-   int n = 1;
+   int n;
+   int i;
+   int temp;
+   int timed_test;
+   int shift_val;
+   int coeff;
    complex* a;
    complex* b;
-   int j;
-#ifndef RUN_EXAMPLE
-   int i;
-   const int max_coeff = 10;
-   const int num_iter = 100;
-   const int max_n = (1<<15);
-#endif
-
-   srand(time(NULL));
    
-#ifdef RUN_EXAMPLE
-   n = 4;
-#else 
-   while ((n = (n<<1)) <= max_n)
-#endif
+   if (argc == 2 && (strcmp(argv[1], "-t") == 0))
+      timed_test = 1;
+   else 
+      timed_test = 0;
+
+   if (timed_test)
    {
-      clock_t start = clock();
+      srand(time(NULL));
       
-      a = (complex*)malloc(2 * n * sizeof(complex));
-      b = (complex*)malloc(2 * n * sizeof(complex));
-      
- 
-#ifndef RUN_EXAMPLE 
-      for (i = 0; i < num_iter; i++)
-#endif
+      n = 1;
+      shift_val = 0;
+      while ((n = (n<<1)) <= MAX_N)
       {
-         for (j = 0; j < (2*n); j++)
+         shift_val++;
+         clock_t start = clock();
+         
+         a = (complex*)malloc(2 * n * sizeof(complex));
+         b = (complex*)malloc(2 * n * sizeof(complex));
+         
+         /* Randomize polynomials to multiply */
+         for (i = 0; i < (2*n); i++)
          {
-            if (j < n)
-            {
-#ifdef RUN_EXAMPLE
-               a[j].r = n-j; a[j].i = 0.0;
-               b[j].r = n-j; b[j].i = 0.0;
-#else
-               a[j].r = rand()%max_coeff; a[j].i = 0.0;
-               b[j].r = rand()%max_coeff; b[j].i = 0.0;
-#endif
+            if (i < n)
+            {  
+               a[i].r = rand()%MAX_COEFF; a[i].i = 0.0;
+               b[i].r = rand()%MAX_COEFF; b[i].i = 0.0;
             }
-            else
+            else /* pad with zeros */
             {
-               a[j].r = 0.0; a[j].i = 0.0;
-               b[j].r = 0.0; b[j].i = 0.0;
+               a[i].r = 0.0; a[i].i = 0.0;
+               b[i].r = 0.0; b[i].i = 0.0;
             }
          }
          
          /* Perform polynomial multiplication and place results in a */
          poly_mul(a, b, 2*n);
          
-#ifdef RUN_EXAMPLE
-         /* Print results of polynomial multiplication */
-         for (j = 0; j < (2*n-1); j++)
-         {
-            if (j > 100)
-               break;
-            printf("[%d] = %d\n", j, (int)a[j].r);
-         }
-#endif
+         free(a);
+         free(b);
+         
+         printf("[N = 2^%d = %d] Time elapsed: %.9f sec\n", 
+            shift_val, n, ((double)clock() - start) / CLOCKS_PER_SEC);
+      }
+   }
+   else
+   {
+      printf("Enter the size of the polynomials: ");
+      scanf("%d",&n);
+      
+      /* set temp to be the next biggest power of two */
+      temp = 1;
+      while (temp < n)
+         temp = temp << 1;
+      
+      /* Allocate space for polynomials */
+      a = (complex*)malloc(2 * temp * sizeof(complex));
+      b = (complex*)malloc(2 * temp * sizeof(complex));
+      
+      /* Prompt user for coefficients */
+      printf("Enter coeffs for polynomial #1, starting with x^0, seperated by spaces:\n> ");
+      for (i = 0; i < n; i++)
+      {
+         scanf("%d",&coeff);
+         a[i].r = (double)coeff;
+         a[i].i = 0.0;
       }
       
-      free(a);
-      free(b);
-#ifndef RUN_EXAMPLE      
-      printf("[N = %d] Time elapsed: %.9f\n", n, ((double)clock() - start) / CLOCKS_PER_SEC);
-#endif
+      printf("Enter coeffs for polynomial #2:\n> ");
+      for (i = 0; i < n; i++)
+      {
+         scanf("%d",&coeff);
+         b[i].r = (double)coeff;
+         b[i].i = 0.0;
+      }
+         
+      /* Pad the rest with zeros */
+      for (i = n; i < (2*temp); i++)
+      {
+         a[i].r = 0.0; a[i].i = 0.0;
+         b[i].r = 0.0; b[i].i = 0.0;
+      }
+         
+      /* Multiply polynomials */
+      poly_mul(a, b, 2*temp);
+      
+      printf("\nPrinting coefficients for x^i:\n");
+      for (i = 0; i < (2*temp-1); i++)
+      {
+         if (i > 100)
+            break;
+
+         printf("[%d] = %.0f\n", i, a[i].r);
+      }
    }
-   
+
    return 0;
 }

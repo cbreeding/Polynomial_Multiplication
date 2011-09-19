@@ -40,16 +40,30 @@ Example:
              
    [using octave]
 
-      > floor(abs(ifft(fft([4 2 1], 8).*fft([1 2 3], 8), 8)))
+      > round(abs(ifft(fft([4 2 1], 8).*fft([1 2 3], 8), 8)))
       ans = 
       
-          3   10   17    8    3    0    0    0
+          4   10   17    8    3    0    0    0
    
    [using recursive_fft]
 
-      $ ./polymul [4 2 1] [1 2 3]
-              
+      $ ./polymul.exe
+      Enter the size of the polynomials: 3
+      Enter coeffs for polynomial #1, starting with x^0, seperated by spaces:
+      > 4 2 1
+      Enter coeffs for polynomial #2:
+      > 1 2 3
 
+      Printing coefficients for x^i:
+      [0] = 4
+      [1] = 10
+      [2] = 17
+      [3] = 8
+      [4] = 3
+      [5] = 0
+      [6] = 0
+
+              
 -------------------------------------------------------------------------------
 DIRECTORY STRUCTURE
 -------------------------------------------------------------------------------
@@ -71,12 +85,10 @@ $ gcc *.c -o polymul.exe
 
 There are currently two modes of operation:
 
-   1. polymul.exe poly1 poly2
+   1. polymul.exe
    
-      This will multiply the two polynomials and print the result. The form of
-      these polynomials is [coeff_x^0 coeff_x^1 ... coeff_x^n]. For example,
-      
-      $ ./polymul [4 2 1] [1 2 3]
+      This will prompt the user to enter two polynomials to multiply and will
+      print the results.
       
    2. polymul.exe -t
    

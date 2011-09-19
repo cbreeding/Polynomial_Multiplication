@@ -34,11 +34,13 @@ complex complex_sub(complex a, complex b)
    return ans;
 }
 
+#if 0
 /* bit_reverse_copy - see common_defs.h for more details */
 void bit_reverse_copy(complex* a, complex* a_rev_copy)
 {
    a = 0;
 }
+#endif
 
 /* poly_mul - see common_defs.h for more details */
 void poly_mul(complex* a, complex* b, int n)

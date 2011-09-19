@@ -1,6 +1,7 @@
 #include "common_defs.h"
 
 /* iterative_fft - see common_defs.h for more details */
+#if 0
 void iterative_fft(complex* a, int n, int inv)
 {
    complex* A;
@@ -10,3 +11,4 @@ void iterative_fft(complex* a, int n, int inv)
    
    free(A);
 }
+#endif
