@@ -1,14 +1,84 @@
+-------------------------------------------------------------------------------
+DISCLAIMER
+-------------------------------------------------------------------------------
+
+If you are an FIT student, please do not copy without permission. Consult 
+the CS honor code: http://www.cs.fit.edu/~wds/program/cshonor/
+
+-------------------------------------------------------------------------------
+ABOUT
+-------------------------------------------------------------------------------
+
 Programming project for FIT CSE 5211 Analysis of Algorithms course.
 
 Contains three different implementations of polynomial multiplication, all
-of which are based on the FFT.
+of which are based on the FFT algorithm.
 
    1. Recursive
    2. Iterative
    3. Parallel
    
-The recursive and iterative implementations will execute on the CPU, and the parallel
-implementation will execute on the GPU, using OpenCL.
+The recursive and iterative implementations will execute on the CPU, and the 
+parallel implementation will execute on the GPU, using OpenCL.
 
-If you are an FIT student, please do not copy without permission. Consult the CS honor
-code: http://www.cs.fit.edu/~wds/program/cshonor/
+For each implementation, you can verify the answer is correct by multiplying
+polynomials in Matlab or Octave and verifying it matches the output
+of the program.
+
+Example:
+
+   [by hand]
+
+                       x^2 +  2x + 4
+                    * 3x^2 +  2x + 1
+                    ----------------
+                       x^2 +  2x + 4
+              2x^3 +  4x^2 +  8x
+       3x^4 + 6x^3 + 12x^2
+       -----------------------------
+       3x^4 + 8x^3 + 17x^2 + 10x + 4
+             
+   [using octave]
+
+      > floor(abs(ifft(fft([4 2 1], 8).*fft([1 2 3], 8), 8)))
+      ans = 
+      
+          3   10   17    8    3    0    0    0
+   
+   [using recursive_fft]
+
+      $ ./polymul [4 2 1] [1 2 3]
+              
+
+-------------------------------------------------------------------------------
+DIRECTORY STRUCTURE
+-------------------------------------------------------------------------------
+
+/Polynomial_Multiplication
+   README                        This File
+   common_defs.h                 Common definitions used in all 3 implementations
+   common_defs.c                 Common functions used in all 3 implementations
+   recursive_fft.c               Recursive FFT implementation
+   iterative_fft.c               Iterative FFT implementation
+   main.c                        Main driver
+   /opencl                       VS project for OpenCL HelloWorld application
+   
+-------------------------------------------------------------------------------
+BUILD PROCESS
+-------------------------------------------------------------------------------
+
+$ gcc *.c -o polymul.exe
+
+There are currently two modes of operation:
+
+   1. polymul.exe poly1 poly2
+   
+      This will multiply the two polynomials and print the result. The form of
+      these polynomials is [coeff_x^0 coeff_x^1 ... coeff_x^n]. For example,
+      
+      $ ./polymul [4 2 1] [1 2 3]
+      
+   2. polymul.exe -t
+   
+      This will time the execution of multiplying random polynomials of 
+      various sizes and print the results.
