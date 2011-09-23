@@ -14,6 +14,7 @@ int main(int argc, char* argv[])
    int timed_test;
    int shift_val;
    int coeff;
+   int ret_val;
    complex* a;
    complex* b;
    
@@ -65,7 +66,7 @@ int main(int argc, char* argv[])
    else
    {
       /* Read size of coefficient array from stdin */
-      scanf("%d",&n);
+      ret_val = scanf("%d",&n);
       
       /* set temp to be the next biggest power of two */
       temp = 1;
@@ -79,7 +80,7 @@ int main(int argc, char* argv[])
       /* Read coefficients from stdin */
       for (i = 0; i < n; i++)
       {
-         scanf("%d",&coeff);
+         ret_val = scanf("%d",&coeff);
          a[i].r = (double)coeff;
          a[i].i = 0.0;
       }
@@ -87,7 +88,7 @@ int main(int argc, char* argv[])
 #ifndef REC_FFT
       for (i = 0; i < n; i++)
       {
-         scanf("%d",&coeff);
+         ret_val = scanf("%d",&coeff);
          b[i].r = (double)coeff;
          b[i].i = 0.0;
       }
