@@ -48,11 +48,9 @@ Example:
    [using recursive_fft]
 
       $ ./polymul.exe
-      Enter the size of the polynomials: 3
-      Enter coeffs for polynomial #1, starting with x^0, seperated by spaces:
-      > 4 2 1
-      Enter coeffs for polynomial #2:
-      > 1 2 3
+      3
+      4 2 1
+      1 2 3
 
       Printing coefficients for x^i:
       [0] = 4
@@ -75,22 +73,28 @@ DIRECTORY STRUCTURE
    recursive_fft.c               Recursive FFT implementation
    iterative_fft.c               Iterative FFT implementation
    main.c                        Main driver
-   /opencl                       VS project for OpenCL HelloWorld application
+   /opencl                       Parallel FFT implementation and OpenCL examples
    
 -------------------------------------------------------------------------------
 BUILD PROCESS
 -------------------------------------------------------------------------------
 
-$ gcc *.c -o polymul.exe
+$ make
 
-There are currently two modes of operation:
+This will build three different executables:
 
-   1. polymul.exe
-   
-      This will prompt the user to enter two polynomials to multiply and will
-      print the results.
+   1. recursive_fft.exe
       
-   2. polymul.exe -t
+      Reads a set of polynomial coefficients from stdin and evaluates them at
+      complex roots of unity using the recursive FFT algorithm
+      
+   2. timed_fft.exe
    
-      This will time the execution of multiplying random polynomials of 
-      various sizes and print the results.
+      Executes the recursive FFT algorithm with random coefficients with
+      increasing powers of 2
+
+   3. polymul.exe
+   
+      Reads two sets of polynomial coefficients from stdin and multiplies the
+      corresponding polynomials
+      
