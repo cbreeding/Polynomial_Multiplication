@@ -108,7 +108,7 @@ int main(int argc, char* argv[])
       /* Execute recursive FFT (results placed in b) */
       recursive_fft(a, b, n, 0);
       
-      printf("\nPrinting coefficient evaluations at w_n = e^(2*PI*i/n):\n");
+      printf("\nPrinting coefficient evaluations at w_n^k = e^(2*PI*i*k/n):\n");
       for (i = 0; i < n; i++)
       {
          if (i > 100)
@@ -124,7 +124,7 @@ int main(int argc, char* argv[])
       /* Multiply polynomials */
       poly_mul(a, b, 2*temp);
       
-      printf("\nPrinting coefficients for x^i:\n");
+      printf("\nPrinting coefficients for x^k:\n");
       for (i = 0; i < (2*temp-1); i++)
       {
          if (i > 100)
@@ -133,6 +133,9 @@ int main(int argc, char* argv[])
          printf("[%d] = %.0f\n", i, a[i].r);
       }
 #endif
+
+      free(a);
+      free(b);
    }
 
    return 0;
