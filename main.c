@@ -17,10 +17,11 @@ int main(int argc, char* argv[])
    complex* a;
    complex* b;
    
-   if (argc == 2 && (strcmp(argv[1], "-t") == 0))
+#ifdef TIMED_FFT
       timed_test = 1;
-   else 
+#else 
       timed_test = 0;
+#endif
 
    if (timed_test)
    {
@@ -63,7 +64,7 @@ int main(int argc, char* argv[])
    }
    else
    {
-      printf("Enter the size of the polynomials: ");
+      /* Read size of coefficient array from stdin */
       scanf("%d",&n);
       
       /* set temp to be the next biggest power of two */
@@ -75,8 +76,7 @@ int main(int argc, char* argv[])
       a = (complex*)malloc(2 * temp * sizeof(complex));
       b = (complex*)malloc(2 * temp * sizeof(complex));
       
-      /* Prompt user for coefficients */
-      printf("Enter coeffs for polynomial #1, starting with x^0, seperated by spaces:\n> ");
+      /* Read coefficients from stdin */
       for (i = 0; i < n; i++)
       {
          scanf("%d",&coeff);
@@ -84,13 +84,14 @@ int main(int argc, char* argv[])
          a[i].i = 0.0;
       }
       
-      printf("Enter coeffs for polynomial #2:\n> ");
+#ifndef REC_FFT
       for (i = 0; i < n; i++)
       {
          scanf("%d",&coeff);
          b[i].r = (double)coeff;
          b[i].i = 0.0;
       }
+#endif
          
       /* Pad the rest with zeros */
       for (i = n; i < (2*temp); i++)
@@ -99,6 +100,26 @@ int main(int argc, char* argv[])
          b[i].r = 0.0; b[i].i = 0.0;
       }
          
+#ifdef REC_FFT
+      /* set n to next biggest power of 2 */
+      n = temp; 
+      
+      /* Execute recursive FFT (results placed in b) */
+      recursive_fft(a, b, n, 0);
+      
+      printf("\nPrinting coefficient evaluations at w_n = e^(2*PI*i/n):\n");
+      for (i = 0; i < n; i++)
+      {
+         if (i > 100)
+            break;
+
+         printf("[%d] = %.4f %s %.4fi\n", 
+            i,
+            b[i].r,
+            b[i].i < 0.0 ? "-" : "+",
+            b[i].i < 0.0 ? (b[i].i*-1.0) : b[i].i);
+      }
+#else
       /* Multiply polynomials */
       poly_mul(a, b, 2*temp);
       
@@ -110,6 +131,7 @@ int main(int argc, char* argv[])
 
          printf("[%d] = %.0f\n", i, a[i].r);
       }
+#endif
    }
 
    return 0;
