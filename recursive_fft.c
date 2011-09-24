@@ -12,21 +12,22 @@ void recursive_fft(complex* a, complex* y, int n, int inv)
    complex* y0;
    complex* y1;
    int i, k;
+   
+#ifdef DEBUG_TRACE
+   /* Debug print of recursion trace */
+   printf("N = %-3d\v\b\b\b\b\b",n);
+#endif
 
    /* Base Case */
    if (n == 1)
    {
 #ifdef DEBUG_TRACE
-      printf("     N = %d \n     ",n); /* Debug print of recursion trace, extra space in front if n=1 */
+      /* For proper formatting, need to backspace for next level up */
+      printf("\b\b");
 #endif
       y[0] = a[0];
       return;
    }
-
-#ifdef DEBUG_TRACE
-   /* Debug print of recursion trace */
-   printf("N = %d \n     ",n);
-#endif
 
    /* Calculate principal nth root of unity (i.e. exp(2*PI*i/n)) */
    if (inv)
@@ -67,6 +68,11 @@ void recursive_fft(complex* a, complex* y, int n, int inv)
       y[k+n/2] = complex_sub(y0[k], twiddle);
       w        = complex_mul(w, wn);
    }
+   
+#ifdef DEBUG_TRACE
+   /* For proper formatting, need to backspace for next level up */
+   printf("\b\b");
+#endif
    
    free(a0);
    free(a1);

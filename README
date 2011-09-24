@@ -52,7 +52,7 @@ Example:
       4 2 1
       1 2 3
 
-      Printing coefficients for x^i:
+      Printing coefficients for x^k:
       [0] = 4
       [1] = 10
       [2] = 17
