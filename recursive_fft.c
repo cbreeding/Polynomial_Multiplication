@@ -16,13 +16,17 @@ void recursive_fft(complex* a, complex* y, int n, int inv)
    /* Base Case */
    if (n == 1)
    {
+#ifdef DEBUG_TRACE
       printf("     N = %d \n     ",n); /* Debug print of recursion trace, extra space in front if n=1 */
+#endif
       y[0] = a[0];
       return;
    }
-   
+
+#ifdef DEBUG_TRACE
    /* Debug print of recursion trace */
    printf("N = %d \n     ",n);
+#endif
 
    /* Calculate principal nth root of unity (i.e. exp(2*PI*i/n)) */
    if (inv)

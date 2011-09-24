@@ -9,7 +9,7 @@ timed_fft: $(SRC)
 	$(CC) $(CFLAGS) $^ $(LIBS) -DTIMED_FFT -o $@
    
 recursive_fft: $(SRC)
-	$(CC) $(CFLAGS) $^ $(LIBS) -DREC_FFT -o $@
+	$(CC) $(CFLAGS) $^ $(LIBS) -DREC_FFT -DDEBUG_TRACE -o $@
    
 polymul: $(SRC)
 	$(CC) $(CFLAGS) $^ $(LIBS) -o $@
