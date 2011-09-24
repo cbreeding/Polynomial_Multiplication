@@ -4,7 +4,11 @@
 //
 #include <stdio.h>
 #include <stdlib.h>
-#include <CL/cl.h>
+#if defined __APPLE__ || defined(MACOSX)
+    #include <OpenCL/opencl.h>
+#else
+    #include <CL/cl.h>
+#endif
 #include <time.h>
  
 #define MAX_SOURCE_SIZE (0x100000)
