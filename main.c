@@ -10,7 +10,7 @@ int main(int argc, char* argv[])
 {
    int n;
    int i;
-   int temp;
+   int next_power_of_2;
    int timed_test;
    int shift_val;
    int coeff;
@@ -68,14 +68,14 @@ int main(int argc, char* argv[])
       /* Read size of coefficient array from stdin */
       ret_val = scanf("%d",&n);
       
-      /* set temp to be the next biggest power of two */
-      temp = 1;
-      while (temp < n)
-         temp = temp << 1;
+      /* Determine the next biggest power of two */
+      next_power_of_2 = 1;
+      while (next_power_of_2 < n)
+         next_power_of_2 <<= 1;
       
       /* Allocate space for polynomials */
-      a = (complex*)malloc(2 * temp * sizeof(complex));
-      b = (complex*)malloc(2 * temp * sizeof(complex));
+      a = (complex*)malloc(2 * next_power_of_2 * sizeof(complex));
+      b = (complex*)malloc(2 * next_power_of_2 * sizeof(complex));
       
       /* Read coefficients from stdin */
       for (i = 0; i < n; i++)
@@ -95,16 +95,15 @@ int main(int argc, char* argv[])
 #endif
          
       /* Pad the rest with zeros */
-      for (i = n; i < (2*temp); i++)
+      for (i = n; i < (2 * next_power_of_2); i++)
       {
          a[i].r = 0.0; a[i].i = 0.0;
          b[i].r = 0.0; b[i].i = 0.0;
       }
+      
+      n = next_power_of_2; 
          
 #ifdef REC_FFT
-      /* set n to next biggest power of 2 */
-      n = temp; 
-      
       /* Execute recursive FFT (results placed in b) */
       recursive_fft(a, b, n, 0);
       
@@ -122,10 +121,10 @@ int main(int argc, char* argv[])
       }
 #else
       /* Multiply polynomials */
-      poly_mul(a, b, 2*temp);
+      poly_mul(a, b, 2*n);
       
       printf("\nPrinting coefficients for x^k:\n");
-      for (i = 0; i < (2*temp-1); i++)
+      for (i = 0; i < (2*n - 1); i++)
       {
          if (i > 100)
             break;
