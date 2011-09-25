@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
          free(a);
          free(b);
          
-         printf("[N = 2^%d = %d] Time elapsed: %.9f sec\n", 
+         printf("[N = 2^%-2d = %-7d] Time elapsed: %.9f sec\n", 
             shift_val, n, ((double)clock() - start) / CLOCKS_PER_SEC);
       }
    }
