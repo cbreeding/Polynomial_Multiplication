@@ -1,7 +1,12 @@
 #include <math.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include "common_defs.h"
+
+#ifdef DEBUG_TRACE
+static char debug_buf[256];
+#endif
 
 /* recursive_fft - see common_defs.h for more details */
 void recursive_fft(complex* a, complex* y, int n, int inv)
@@ -15,7 +20,7 @@ void recursive_fft(complex* a, complex* y, int n, int inv)
    
 #ifdef DEBUG_TRACE
    /* Debug print of recursion trace */
-   printf("N = %-3d\v\b\b\b\b\b",n);
+   printf("N = %-3d\v\b\b\b",n);
 #endif
 
    /* Base Case */
@@ -23,7 +28,7 @@ void recursive_fft(complex* a, complex* y, int n, int inv)
    {
 #ifdef DEBUG_TRACE
       /* For proper formatting, need to backspace for next level up */
-      printf("\b\b");
+      printf("\b\b\b\b");
 #endif
       y[0] = a[0];
       return;
@@ -66,12 +71,27 @@ void recursive_fft(complex* a, complex* y, int n, int inv)
       twiddle  = complex_mul(w, y1[k]);
       y[k]     = complex_add(y0[k], twiddle);
       y[k+n/2] = complex_sub(y0[k], twiddle);
-      w        = complex_mul(w, wn);
+      
+#ifdef DEBUG_TRACE
+      sprintf(debug_buf,
+         "w = (%.4f, %.4f), y[%d] = (%.4f, %.4f), y[%d] = (%.4f, %.4f)",
+         w.r, w.i,
+         k, y[k].r, y[k].i,
+         k+n/2, y[k+n/2].r, y[k+n/2].i);
+      printf("%s", debug_buf);
+      
+      /* After printing string, go back to where we started */
+      for (i = 0; i < strlen(debug_buf); i++)
+         printf("\b");
+      printf("\v");
+#endif      
+      
+      w = complex_mul(w, wn);
    }
    
 #ifdef DEBUG_TRACE
    /* For proper formatting, need to backspace for next level up */
-   printf("\b\b");
+   printf("\b\b\b\b");
 #endif
    
    free(a0);
