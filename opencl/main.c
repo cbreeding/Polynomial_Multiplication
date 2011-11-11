@@ -13,10 +13,14 @@
 static void print_device_info(cl_platform_id p, cl_device_id d);
 static int get_input_polynomials();
 static void swap_mem_ptr(cl_mem* a, cl_mem* b);
+static int gen_polynomials();
 
 // Global coefficient arrays
 cl_float2* poly1;
 cl_float2* poly2;
+
+// max work group size
+size_t group_size;
 
 
 //-----------------------------------------------------------------------------
@@ -55,7 +59,8 @@ int main(int argc, char* argv[])
    // Get polynomials from user
    //
    ////////////////////////////////////
-   int fft_size = 2 * get_input_polynomials();
+   //int fft_size = 2 * get_input_polynomials();
+   int fft_size = 2 * gen_polynomials((1<<24));
    
    // Calculate log (base 2) of fft_size
    int lg_n = 0;
@@ -229,11 +234,14 @@ int main(int argc, char* argv[])
    // Deploy kernel instances to GPU
    //
    ////////////////////////////////////
-   
-   clock_t start = clock();
+   printf("starting\n");
    
    size_t global_item_size = fft_size;
-   size_t local_item_size = 1;
+   size_t local_item_size;
+   if (fft_size >= group_size)
+      local_item_size = group_size;
+   else
+      local_item_size = fft_size;
    
    // Transfer host memory to device
    ret = clEnqueueWriteBuffer(command_queue, initial_input1, CL_TRUE, 0,
@@ -241,7 +249,7 @@ int main(int argc, char* argv[])
    ret = clEnqueueWriteBuffer(command_queue, initial_input2, CL_TRUE, 0,
          fft_size * sizeof(cl_float2), poly2, 0, NULL, NULL);
          
-   // Bit-Reverse Perumtation
+   // Bit-Reverse Permutation
    ret = clEnqueueNDRangeKernel(command_queue, bitrev_kernel1, 1, NULL, 
          &global_item_size, &local_item_size, 0, NULL, NULL);
          
@@ -266,21 +274,21 @@ int main(int argc, char* argv[])
    // Transfer device memory to host
    ret = clEnqueueReadBuffer(command_queue, final_output, CL_TRUE, 0, 
          fft_size * sizeof(cl_float2), poly1, 0, NULL, NULL);
-         
-   printf("Time elapsed: %.9f sec\n", ((double)clock() - start) / CLOCKS_PER_SEC);
+   printf("done\n");
    
    ////////////////////////////////////
    //
    // Verify results
    //
    ////////////////////////////////////
-         
+#if 0
    printf("\nPrinting coefficients for x^k:\n");
    for (i=0; i<(fft_size-1); i++)
       printf("[k = %d]: %.0f\n", 
              i, 
              // eliminates "-0" floating-point artifact in output
              poly1[i].x < 0 ? -poly1[i].x : poly1[i].x); 
+#endif
  
    ////////////////////////////////////
    //
@@ -397,6 +405,46 @@ static int get_input_polynomials()
 
 
 //-----------------------------------------------------------------------------
+// NAME: gen_polynomials
+//
+// PURPOSE: Generates two polynomial coefficients arrays of size (2*size)
+//
+// INPUT:
+//    size     Size of polynomial
+//
+// OUTPUT:
+//    poly1    First generated coefficient array
+//    poly2    Second generated coefficient array
+//
+// RETURNS: size of polynomials generated
+//-----------------------------------------------------------------------------
+static int gen_polynomials(int size)
+{
+   int i;
+   const int MAX_COEFF = 10;
+   
+   srand(time(NULL));
+   
+   poly1 = (cl_float2*)malloc(2 * size * sizeof(cl_float2));
+   poly2 = (cl_float2*)malloc(2 * size * sizeof(cl_float2));
+   
+   for (i = 0; i < size; i++)
+   {
+      poly1[i].x = rand()%MAX_COEFF; poly1[i].y = 0.0;
+      poly2[i].x = rand()%MAX_COEFF; poly2[i].y = 0.0;
+   }
+   
+   for (i = size; i < (2*size); i++)
+   {
+      poly1[i].x = 0.0; poly1[i].y = 0.0;
+      poly2[i].x = 0.0; poly2[i].y = 0.0;
+   }
+   
+   return size;
+}
+
+
+//-----------------------------------------------------------------------------
 // NAME: print_device_info
 //
 // PURPOSE: Prints the specifications of a particular compute device
@@ -419,7 +467,6 @@ static void print_device_info(cl_platform_id p, cl_device_id d)
    cl_long global_mem;
    cl_long local_mem;
    cl_uint clk_freq;
-   size_t group_size;
    cl_uint item_dim;
    size_t* item_sizes;
    int i;
