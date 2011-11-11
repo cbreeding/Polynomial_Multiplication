@@ -12,6 +12,7 @@
 // Function prototypes
 static void print_device_info(cl_platform_id p, cl_device_id d);
 static int get_input_polynomials();
+static void swap_mem_ptr(cl_mem* a, cl_mem* b);
 
 // Global coefficient arrays
 cl_float2* poly1;
@@ -33,9 +34,11 @@ cl_float2* poly2;
 //             a. Bit-reverse permutation
 //             b. lg(n) FFT stages for both polynomials
 //             c. Point-wise multiplication of two polynomials
-//             d. lg(n) inverse-FFT stages
+//             d. Bit-reverse permutation
+//             e. lg(n) inverse-FFT stages
 //       4. Deploy kernel instances to GPU
 //       5. Verify results
+//       6. Clean up
 //
 // INPUT: void
 //
@@ -52,7 +55,7 @@ int main(int argc, char* argv[])
    // Get polynomials from user
    //
    ////////////////////////////////////
-   int fft_size = get_input_polynomials();
+   int fft_size = 2 * get_input_polynomials();
    
    // Calculate log (base 2) of fft_size
    int lg_n = 0;
@@ -112,11 +115,17 @@ int main(int argc, char* argv[])
    printf("%s\n",build_log);
    free(build_log);
    
-   cl_mem in_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE, 
+   // Allocate memory on device for coefficient array input and output
+   cl_mem in_mem_obj1 = clCreateBuffer(context, CL_MEM_READ_WRITE, 
          fft_size * sizeof(cl_float2), NULL, &ret);
-   cl_mem out_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE,
+   cl_mem in_mem_obj2 = clCreateBuffer(context, CL_MEM_READ_WRITE, 
          fft_size * sizeof(cl_float2), NULL, &ret);
-   cl_mem initial_input = in_mem_obj;
+   cl_mem out_mem_obj1 = clCreateBuffer(context, CL_MEM_READ_WRITE,
+         fft_size * sizeof(cl_float2), NULL, &ret);
+   cl_mem out_mem_obj2 = clCreateBuffer(context, CL_MEM_READ_WRITE,
+         fft_size * sizeof(cl_float2), NULL, &ret);
+   cl_mem initial_input1 = in_mem_obj1;
+   cl_mem initial_input2 = in_mem_obj2;
 
    ////////////////////////////////////
    //
@@ -127,18 +136,19 @@ int main(int argc, char* argv[])
    //---------------------------
    // Bit-Reverse Permutation
    //---------------------------
-   cl_kernel bitrev_kernel = clCreateKernel(program, "bitrev_permute", &ret);
+   cl_kernel bitrev_kernel1 = clCreateKernel(program, "bitrev_permute_x2", &ret);
 
    // Set the arguments of the kernel
-   ret = clSetKernelArg(bitrev_kernel, 0, sizeof(cl_mem), (void *)&in_mem_obj);
-   ret = clSetKernelArg(bitrev_kernel, 1, sizeof(cl_mem), (void *)&out_mem_obj);
-   ret = clSetKernelArg(bitrev_kernel, 2, sizeof(unsigned int), (void*)&lg_n);
+   ret = clSetKernelArg(bitrev_kernel1, 0, sizeof(cl_mem), (void *)&in_mem_obj1);
+   ret = clSetKernelArg(bitrev_kernel1, 1, sizeof(cl_mem), (void *)&in_mem_obj2);
+   ret = clSetKernelArg(bitrev_kernel1, 2, sizeof(cl_mem), (void *)&out_mem_obj1);
+   ret = clSetKernelArg(bitrev_kernel1, 3, sizeof(cl_mem), (void *)&out_mem_obj2);
+   ret = clSetKernelArg(bitrev_kernel1, 4, sizeof(unsigned int), (void*)&lg_n);
          
    // Swap device memory pointers (output of this will be input to parallel-fft)
-   cl_mem temp_mem = in_mem_obj;
-   in_mem_obj = out_mem_obj;
-   out_mem_obj = temp_mem;
-         
+   swap_mem_ptr(&in_mem_obj1, &out_mem_obj1);
+   swap_mem_ptr(&in_mem_obj2, &out_mem_obj2);
+ 
    //---------------------------
    // lg(n) FFT stages
    //---------------------------
@@ -147,33 +157,72 @@ int main(int argc, char* argv[])
    cl_kernel* fft_kernel = (cl_kernel*)malloc(lg_n * sizeof(cl_kernel));
    for (i=0; i<lg_n; i++)
    {
-      fft_kernel[i] = clCreateKernel(program, "parallel_fft", &ret);
+      fft_kernel[i] = clCreateKernel(program, "parallel_fft_x2", &ret);
       
       // Set the arguments of the kernel
       n = (1 << (i+1)); // double n for each stage of FFT (2,4,8,16...)
-      ret = clSetKernelArg(fft_kernel[i], 0, sizeof(cl_mem), (void *)&in_mem_obj);
-      ret = clSetKernelArg(fft_kernel[i], 1, sizeof(cl_mem), (void *)&out_mem_obj);
-      ret = clSetKernelArg(fft_kernel[i], 2, sizeof(unsigned int), (void*)&n);
-            
-      // If not last stage, swap device memory pointers 
-      // (output of this stage will be input of next).
-      if (i != (lg_n-1))
-      {
-         temp_mem = in_mem_obj;
-         in_mem_obj = out_mem_obj;
-         out_mem_obj = temp_mem;
-      }
+      ret = clSetKernelArg(fft_kernel[i], 0, sizeof(cl_mem), (void *)&in_mem_obj1);
+      ret = clSetKernelArg(fft_kernel[i], 1, sizeof(cl_mem), (void *)&in_mem_obj2);
+      ret = clSetKernelArg(fft_kernel[i], 2, sizeof(cl_mem), (void *)&out_mem_obj1);
+      ret = clSetKernelArg(fft_kernel[i], 3, sizeof(cl_mem), (void *)&out_mem_obj2);
+      ret = clSetKernelArg(fft_kernel[i], 4, sizeof(unsigned int), (void*)&n);
+      
+      // Swap memory pointers (output of this stage will be input of next)
+      swap_mem_ptr(&in_mem_obj1, &out_mem_obj1);
+      swap_mem_ptr(&in_mem_obj2, &out_mem_obj2);
    }
    
    //---------------------------
    // Point-wise multiplication
    //---------------------------
+   cl_kernel mul_kernel = clCreateKernel(program, "pointwise_mul", &ret);
    
+   // Set the arguments of the kernel
+   ret = clSetKernelArg(mul_kernel, 0, sizeof(cl_mem), (void *)&in_mem_obj1);
+   ret = clSetKernelArg(mul_kernel, 1, sizeof(cl_mem), (void *)&in_mem_obj2);
+   ret = clSetKernelArg(mul_kernel, 2, sizeof(cl_mem), (void *)&out_mem_obj1);
+   
+   // Swap memory pointers (output of this stage will be input of next)
+   swap_mem_ptr(&in_mem_obj1, &out_mem_obj1);
+   
+   //---------------------------
+   // Bit-Reverse Permutation
+   //---------------------------
+   cl_kernel bitrev_kernel2 = clCreateKernel(program, "bitrev_permute_x2", &ret);
+
+   // Set the arguments of the kernel
+   // NOTE: We're using the bitrev_permute_x2 kernel function, but we 
+   //       are only concerned with bit reversing in_mem_obj1.
+   ret = clSetKernelArg(bitrev_kernel2, 0, sizeof(cl_mem), (void *)&in_mem_obj1);
+   ret = clSetKernelArg(bitrev_kernel2, 1, sizeof(cl_mem), (void *)&in_mem_obj2);
+   ret = clSetKernelArg(bitrev_kernel2, 2, sizeof(cl_mem), (void *)&out_mem_obj1);
+   ret = clSetKernelArg(bitrev_kernel2, 3, sizeof(cl_mem), (void *)&out_mem_obj2);
+   ret = clSetKernelArg(bitrev_kernel2, 4, sizeof(unsigned int), (void*)&lg_n);
+         
+   // Swap device memory pointers (output of this will be input to inverse parallel-fft)
+   swap_mem_ptr(&in_mem_obj1, &out_mem_obj1);
+ 
    //---------------------------
    // lg(n) inverse-FFT stages
    //---------------------------
+   cl_kernel* inv_fft_kernel = (cl_kernel*)malloc(lg_n * sizeof(cl_kernel));
+   for (i=0; i<lg_n; i++)
+   {
+      inv_fft_kernel[i] = clCreateKernel(program, "inverse_parallel_fft", &ret);
+      
+      // Set the arguments of the kernel
+      n = (1 << (i+1)); // double n for each stage of FFT (2,4,8,16...)
+      ret = clSetKernelArg(inv_fft_kernel[i], 0, sizeof(cl_mem), (void *)&in_mem_obj1);
+      ret = clSetKernelArg(inv_fft_kernel[i], 1, sizeof(cl_mem), (void *)&out_mem_obj1);
+      ret = clSetKernelArg(inv_fft_kernel[i], 2, sizeof(unsigned int), (void*)&n);
+            
+      // Swap memory pointers (output of this stage will be input of next)
+      swap_mem_ptr(&in_mem_obj1, &out_mem_obj1);
+   }
    
-   cl_mem final_output = out_mem_obj;
+   // one final swap
+   swap_mem_ptr(&in_mem_obj1, &out_mem_obj1);
+   cl_mem final_output = out_mem_obj1;
    
    ////////////////////////////////////
    //
@@ -187,11 +236,13 @@ int main(int argc, char* argv[])
    size_t local_item_size = 1;
    
    // Transfer host memory to device
-   ret = clEnqueueWriteBuffer(command_queue, initial_input, CL_TRUE, 0,
+   ret = clEnqueueWriteBuffer(command_queue, initial_input1, CL_TRUE, 0,
          fft_size * sizeof(cl_float2), poly1, 0, NULL, NULL);
+   ret = clEnqueueWriteBuffer(command_queue, initial_input2, CL_TRUE, 0,
+         fft_size * sizeof(cl_float2), poly2, 0, NULL, NULL);
          
    // Bit-Reverse Perumtation
-   ret = clEnqueueNDRangeKernel(command_queue, bitrev_kernel, 1, NULL, 
+   ret = clEnqueueNDRangeKernel(command_queue, bitrev_kernel1, 1, NULL, 
          &global_item_size, &local_item_size, 0, NULL, NULL);
          
    // FFT stages
@@ -199,9 +250,22 @@ int main(int argc, char* argv[])
       ret = clEnqueueNDRangeKernel(command_queue, fft_kernel[i], 1, NULL, 
             &global_item_size, &local_item_size, 0, NULL, NULL);
             
+   // Pointwise Multiplication
+   ret = clEnqueueNDRangeKernel(command_queue, mul_kernel, 1, NULL, 
+         &global_item_size, &local_item_size, 0, NULL, NULL);
+         
+   // Bit-Reverse Permutation
+   ret = clEnqueueNDRangeKernel(command_queue, bitrev_kernel2, 1, NULL, 
+         &global_item_size, &local_item_size, 0, NULL, NULL);
+         
+   // Inverse FFT stages
+   for (i=0; i<lg_n; i++)
+      ret = clEnqueueNDRangeKernel(command_queue, inv_fft_kernel[i], 1, NULL, 
+            &global_item_size, &local_item_size, 0, NULL, NULL);
+            
    // Transfer device memory to host
    ret = clEnqueueReadBuffer(command_queue, final_output, CL_TRUE, 0, 
-         fft_size * sizeof(cl_float2), poly2, 0, NULL, NULL);
+         fft_size * sizeof(cl_float2), poly1, 0, NULL, NULL);
          
    printf("Time elapsed: %.9f sec\n", ((double)clock() - start) / CLOCKS_PER_SEC);
    
@@ -211,26 +275,49 @@ int main(int argc, char* argv[])
    //
    ////////////////////////////////////
          
-   // Print results
-   for (i=0; i<fft_size; i++)
-      printf("output[%d] = %f %c %fi\n", 
-         i, 
-         poly2[i].x, 
-         poly2[i].y < 0 ? '-' : '+',
-         poly2[i].y < 0 ? -poly2[i].y : poly2[i].y);
+   printf("\nPrinting coefficients for x^k:\n");
+   for (i=0; i<(fft_size-1); i++)
+      printf("[k = %d]: %.0f\n", 
+             i, 
+             // eliminates "-0" floating-point artifact in output
+             poly1[i].x < 0 ? -poly1[i].x : poly1[i].x); 
  
+   ////////////////////////////////////
+   //
    // Clean up
+   //
+   ////////////////////////////////////
+   
+   // Flush command queue
    ret = clFlush(command_queue);
    ret = clFinish(command_queue);
-   ret = clReleaseKernel(bitrev_kernel);
+   
+   // Release kernels
+   ret = clReleaseKernel(bitrev_kernel1);
+   ret = clReleaseKernel(bitrev_kernel2);
+   for (i=0; i<lg_n; i++)
+   {
+      clReleaseKernel(fft_kernel[i]);
+      clReleaseKernel(inv_fft_kernel[i]);
+   }
+   ret = clReleaseKernel(mul_kernel);
    ret = clReleaseProgram(program);
-   ret = clReleaseMemObject(in_mem_obj);
-   ret = clReleaseMemObject(out_mem_obj);
+   
+   // Release device memory
+   ret = clReleaseMemObject(in_mem_obj1);
+   ret = clReleaseMemObject(in_mem_obj2);
+   ret = clReleaseMemObject(out_mem_obj1);
+   ret = clReleaseMemObject(out_mem_obj2);
+   
+   // Release command queue and context
    ret = clReleaseCommandQueue(command_queue);
    ret = clReleaseContext(context);
+   
+   // Free host memory
    free(poly1);
    free(poly2);
    free(fft_kernel);
+   free(inv_fft_kernel);
    
    return 0;
 }
@@ -280,12 +367,20 @@ static int get_input_polynomials()
    poly2 = (cl_float2*)malloc(2 * next_power_of_2 * sizeof(cl_float2));
    
    // Read coefficients from stdin
-   printf("Enter %d polynomial coefficients (x^0 coeff first): ", n);
+   printf("Enter %d coefficients for first polynomial (x^0 coeff first): ", n);
    for (i = 0; i < n; i++)
    {
       ret_val = scanf("%d",&coeff);
       poly1[i].x = (float)coeff;
       poly1[i].y = 0.0;
+   }
+   printf("\n");
+   printf("Enter %d coefficients for second polynomial (x^0 coeff first): ", n);
+   for (i = 0; i < n; i++)
+   {
+      ret_val = scanf("%d",&coeff);
+      poly2[i].x = (float)coeff;
+      poly2[i].y = 0.0;
    }
    printf("\n");
    
@@ -356,4 +451,12 @@ static void print_device_info(cl_platform_id p, cl_device_id d)
       printf("   Dim %d Work Items: %d\n", i+1, (int)item_sizes[i]);
    printf("   Device Version: %s\n", device_ver);
    printf("-------------------------------------------------\n");
+}
+
+// Swap cl_mem pointers
+static void swap_mem_ptr(cl_mem* a, cl_mem* b)
+{
+   cl_mem temp = *a;
+   *a = *b;
+   *b = temp;
 }
