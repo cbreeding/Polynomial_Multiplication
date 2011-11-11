@@ -9,19 +9,65 @@
 
 #define MAX_SOURCE_SIZE (0x100000)
 
-void print_device_info(cl_platform_id p, cl_device_id d);
-int get_input_polynomials();
+// Function prototypes
+static void print_device_info(cl_platform_id p, cl_device_id d);
+static int get_input_polynomials();
 
+// Global coefficient arrays
 cl_float2* poly1;
 cl_float2* poly2;
- 
+
+
+//-----------------------------------------------------------------------------
+// NAME: main
+//
+// PURPOSE:
+//    Compiles OpenCL kernels, creates device memory buffers, 
+//    creates kernel instances, deploys kernels to GPU, and 
+//    verifies results.
+//
+//    High-Level Algorithm:
+//       1. Get polynomials from user
+//       2. Compile the kernels and create device memory
+//       3. Create kernel instances
+//             a. Bit-reverse permutation
+//             b. lg(n) FFT stages for both polynomials
+//             c. Point-wise multiplication of two polynomials
+//             d. lg(n) inverse-FFT stages
+//       4. Deploy kernel instances to GPU
+//       5. Verify results
+//
+// INPUT: void
+//
+// OUTPUT: Prints device specs and results of polynomial multiplication
+//
+// RETURNS: 0 on success, error code otherwise
+//----------------------------------------------------------------------------- 
 int main(int argc, char* argv[]) 
 {
    int i;
-   int fft_size = 0;
-
-   // Read input polynomials from stdin
-   fft_size = get_input_polynomials();
+   
+   ////////////////////////////////////
+   //
+   // Get polynomials from user
+   //
+   ////////////////////////////////////
+   int fft_size = get_input_polynomials();
+   
+   // Calculate log (base 2) of fft_size
+   int lg_n = 0;
+   i = 1;
+   while (i < fft_size)
+   {
+      lg_n++;
+      i <<= 1;
+   }
+   
+   ////////////////////////////////////
+   //
+   // Compile the kernels and create device memory
+   //
+   ////////////////////////////////////
     
    // Load kernel code into buffer
    FILE *fp;
@@ -51,12 +97,6 @@ int main(int argc, char* argv[])
    cl_context context = clCreateContext( NULL, 1, &device_id, NULL, NULL, &ret);
    cl_command_queue command_queue = clCreateCommandQueue(context, device_id, 0, &ret);
 
-   // Create memory buffers for device
-   cl_mem in_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE, 
-         fft_size * sizeof(cl_float2), NULL, &ret);
-   cl_mem out_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE,
-         fft_size * sizeof(cl_float2), NULL, &ret);
-
    // Create and build the program from the kernel source
    cl_program program = clCreateProgramWithSource(context, 1, 
          (const char **)&source_str, (const size_t *)&source_size, &ret);
@@ -72,68 +112,48 @@ int main(int argc, char* argv[])
    printf("%s\n",build_log);
    free(build_log);
    
-   clock_t start = clock();
-   
-   // Transfer host memory to device
-   ret = clEnqueueWriteBuffer(command_queue, in_mem_obj, CL_TRUE, 0,
-         fft_size * sizeof(cl_float2), poly1, 0, NULL, NULL);
+   cl_mem in_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE, 
+         fft_size * sizeof(cl_float2), NULL, &ret);
+   cl_mem out_mem_obj = clCreateBuffer(context, CL_MEM_READ_WRITE,
+         fft_size * sizeof(cl_float2), NULL, &ret);
+   cl_mem initial_input = in_mem_obj;
 
    ////////////////////////////////////
    //
-   // Bit-Reverse Permutation
+   // Create kernel instances
    //
    ////////////////////////////////////
-   cl_kernel kernel = clCreateKernel(program, "bitrev_permute", &ret);
    
-   // Calculate log (base 2) of fft_size
-   int lg_n = 0;
-   i = 1;
-   while (i < fft_size)
-   {
-      lg_n++;
-      i <<= 1;
-   }
+   //---------------------------
+   // Bit-Reverse Permutation
+   //---------------------------
+   cl_kernel bitrev_kernel = clCreateKernel(program, "bitrev_permute", &ret);
 
    // Set the arguments of the kernel
-   ret = clSetKernelArg(kernel, 0, sizeof(cl_mem), (void *)&in_mem_obj);
-   ret = clSetKernelArg(kernel, 1, sizeof(cl_mem), (void *)&out_mem_obj);
-   ret = clSetKernelArg(kernel, 2, sizeof(unsigned int), (void*)&lg_n);
-
-   // Execute the OpenCL kernel
-   size_t global_item_size = fft_size;
-   size_t local_item_size = 1;
-   ret = clEnqueueNDRangeKernel(command_queue, kernel, 1, NULL, 
-         &global_item_size, &local_item_size, 0, NULL, NULL);
+   ret = clSetKernelArg(bitrev_kernel, 0, sizeof(cl_mem), (void *)&in_mem_obj);
+   ret = clSetKernelArg(bitrev_kernel, 1, sizeof(cl_mem), (void *)&out_mem_obj);
+   ret = clSetKernelArg(bitrev_kernel, 2, sizeof(unsigned int), (void*)&lg_n);
          
    // Swap device memory pointers (output of this will be input to parallel-fft)
    cl_mem temp_mem = in_mem_obj;
    in_mem_obj = out_mem_obj;
    out_mem_obj = temp_mem;
          
-   ////////////////////////////////////
-   //
-   // Parellel-FFT (lg(n) stages/kernel executions)
-   //
-   ////////////////////////////////////
-   
+   //---------------------------
+   // lg(n) FFT stages
+   //---------------------------
    unsigned int n;
    
-   global_item_size = fft_size;
-   local_item_size = 1;
    cl_kernel* fft_kernel = (cl_kernel*)malloc(lg_n * sizeof(cl_kernel));
    for (i=0; i<lg_n; i++)
    {
       fft_kernel[i] = clCreateKernel(program, "parallel_fft", &ret);
       
       // Set the arguments of the kernel
-      n = (1 << (i+1));
+      n = (1 << (i+1)); // double n for each stage of FFT (2,4,8,16...)
       ret = clSetKernelArg(fft_kernel[i], 0, sizeof(cl_mem), (void *)&in_mem_obj);
       ret = clSetKernelArg(fft_kernel[i], 1, sizeof(cl_mem), (void *)&out_mem_obj);
       ret = clSetKernelArg(fft_kernel[i], 2, sizeof(unsigned int), (void*)&n);
-      
-      // Execute the kernel
-      ret = clEnqueueNDRangeKernel(command_queue, fft_kernel[i], 1, NULL, 
-            &global_item_size, &local_item_size, 0, NULL, NULL);
             
       // If not last stage, swap device memory pointers 
       // (output of this stage will be input of next).
@@ -145,17 +165,51 @@ int main(int argc, char* argv[])
       }
    }
    
+   //---------------------------
+   // Point-wise multiplication
+   //---------------------------
+   
+   //---------------------------
+   // lg(n) inverse-FFT stages
+   //---------------------------
+   
+   cl_mem final_output = out_mem_obj;
+   
    ////////////////////////////////////
    //
-   // Verify Results
+   // Deploy kernel instances to GPU
    //
    ////////////////////////////////////
-
+   
+   clock_t start = clock();
+   
+   size_t global_item_size = fft_size;
+   size_t local_item_size = 1;
+   
+   // Transfer host memory to device
+   ret = clEnqueueWriteBuffer(command_queue, initial_input, CL_TRUE, 0,
+         fft_size * sizeof(cl_float2), poly1, 0, NULL, NULL);
+         
+   // Bit-Reverse Perumtation
+   ret = clEnqueueNDRangeKernel(command_queue, bitrev_kernel, 1, NULL, 
+         &global_item_size, &local_item_size, 0, NULL, NULL);
+         
+   // FFT stages
+   for (i=0; i<lg_n; i++)
+      ret = clEnqueueNDRangeKernel(command_queue, fft_kernel[i], 1, NULL, 
+            &global_item_size, &local_item_size, 0, NULL, NULL);
+            
    // Transfer device memory to host
-   ret = clEnqueueReadBuffer(command_queue, out_mem_obj, CL_TRUE, 0, 
+   ret = clEnqueueReadBuffer(command_queue, final_output, CL_TRUE, 0, 
          fft_size * sizeof(cl_float2), poly2, 0, NULL, NULL);
          
    printf("Time elapsed: %.9f sec\n", ((double)clock() - start) / CLOCKS_PER_SEC);
+   
+   ////////////////////////////////////
+   //
+   // Verify results
+   //
+   ////////////////////////////////////
          
    // Print results
    for (i=0; i<fft_size; i++)
@@ -168,7 +222,7 @@ int main(int argc, char* argv[])
    // Clean up
    ret = clFlush(command_queue);
    ret = clFinish(command_queue);
-   ret = clReleaseKernel(kernel);
+   ret = clReleaseKernel(bitrev_kernel);
    ret = clReleaseProgram(program);
    ret = clReleaseMemObject(in_mem_obj);
    ret = clReleaseMemObject(out_mem_obj);
@@ -181,7 +235,29 @@ int main(int argc, char* argv[])
    return 0;
 }
 
-int get_input_polynomials()
+
+//-----------------------------------------------------------------------------
+// NAME: get_input_polynomials
+//
+// PURPOSE:
+//    Reads input polynomial size and coefficients from stdin and allocates
+//    memory for coefficients. 
+//
+//    If the size of the polynomial is not a power of 2, the coefficient 
+//    array will be padded with zeroes until the next biggest power of 2.
+//
+//    Coefficient array sizes are double the polynomial size. This is because
+//    these arrays will be used during polynomial multiplication, and
+//    multiplying two polynomials of size n will result in a polynomial of
+//    (at most) size 2n-1.
+//
+// INPUT: void
+//
+// OUTPUT: Memory allocation for arrays poly1 and poly2
+//
+// RETURNS: Polynomial size rounded to the next biggest power of 2
+//-----------------------------------------------------------------------------
+static int get_input_polynomials()
 {
    int ret_val;
    int n;
@@ -189,38 +265,57 @@ int get_input_polynomials()
    int coeff;
    int next_power_of_2;
 
-   /* Read size of coefficient array from stdin */
+   // Read size of coefficient array from stdin
+   printf("Enter size of polynomial: ");
    ret_val = scanf("%d",&n);
+   printf("\n");
 
-   /* Determine the next biggest power of two */
+   // Determine the next biggest power of two
    next_power_of_2 = 1;
    while (next_power_of_2 < n)
       next_power_of_2 <<= 1;
    
-   /* Allocate space for polynomials */
+   // Allocate space for polynomials
    poly1 = (cl_float2*)malloc(2 * next_power_of_2 * sizeof(cl_float2));
    poly2 = (cl_float2*)malloc(2 * next_power_of_2 * sizeof(cl_float2));
    
-   /* Read coefficients from stdin */
+   // Read coefficients from stdin
+   printf("Enter %d polynomial coefficients (x^0 coeff first): ", n);
    for (i = 0; i < n; i++)
    {
       ret_val = scanf("%d",&coeff);
       poly1[i].x = (float)coeff;
       poly1[i].y = 0.0;
    }
+   printf("\n");
    
-   /* Pad the rest with zeros */
+   // Pad the rest with zeros
    for (i = n; i < (2 * next_power_of_2); i++)
    {
       poly1[i].x = 0.0; poly1[i].y = 0.0;
       poly2[i].x = 0.0; poly2[i].y = 0.0;
    }
    
-   /* Return size of polynomial */
+   // Return size of polynomial rounded to next biggest power of 2
    return next_power_of_2;
 }
 
-void print_device_info(cl_platform_id p, cl_device_id d)
+
+//-----------------------------------------------------------------------------
+// NAME: print_device_info
+//
+// PURPOSE: Prints the specifications of a particular compute device
+//
+// INPUT:
+//    p     Platform ID
+//    d     Compute Device
+//
+// OUTPUT:
+//    Prints device specifications to stdout
+//
+// RETURNS: void
+//-----------------------------------------------------------------------------
+static void print_device_info(cl_platform_id p, cl_device_id d)
 {
    char vendor[1024];
    char device_ver[1024];
